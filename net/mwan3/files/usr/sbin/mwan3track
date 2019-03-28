@@ -112,8 +112,8 @@ main() {
 	local loss=0
 	local latency=0
 
-	if [ "$STATUS" = "unknown" ]; then
-		echo "unknown" > /var/run/mwan3track/$1/STATUS
+	if [ "$STATUS" = "offline" ]; then
+		echo "offline" > /var/run/mwan3track/$1/STATUS
 		echo "0" > /var/run/mwan3track/$1/UPTIME
 		echo "$(get_uptime)" > /var/run/mwan3track/$1/DOWNTIME
 		score=0
@@ -221,11 +221,7 @@ main() {
 
 			if [ $score -eq $up ]; then
 				echo "offline" > /var/run/mwan3track/$1/STATUS
-				echo "0" > /var/run/mwan3track/$1/UPTIME
-				echo "$(get_uptime)" > /var/run/mwan3track/$1/DOWNTIME
-				$LOG notice "Interface $1 ($2) is offline"
 				env -i ACTION=ifdown INTERFACE=$1 DEVICE=$2 /sbin/hotplug-call iface
-				env -i ACTION="disconnected" INTERFACE="$1" DEVICE="$2" /sbin/hotplug-call iface
 				score=0
 			fi
 		else
