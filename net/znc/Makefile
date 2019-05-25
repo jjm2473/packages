@@ -8,13 +8,13 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=znc
-PKG_VERSION:=1.7.2
-PKG_RELEASE:=1
+PKG_VERSION:=1.7.3
+PKG_RELEASE:=3
 
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
 PKG_SOURCE_URL:=https://znc.in/releases \
 		https://znc.in/releases/archive
-PKG_HASH:=60b4e78f54c532c32673d1ef8e5f606c530ef3a6d6b76ea1daa66459a86682a9
+PKG_HASH:=1e4cc31837a1e8e6cc310873659a167cec16a3fd4281cbc3bf364e42352c113d
 
 PKG_MAINTAINER:=Jonas Gorski <jonas.gorski@gmail.com>
 PKG_LICENSE:=Apache-2.0
@@ -37,7 +37,7 @@ endef
 
 define Package/znc
   $(Package/znc/default)
-  DEPENDS:=+libopenssl +libpthread +libstdcpp +ZNC_ICU:icu +zlib
+  DEPENDS:=+libopenssl +libstdcpp +ZNC_ICU:icu +zlib
   MENU:=1
 endef
 
@@ -279,12 +279,6 @@ PKG_CONFIG_DEPENDS += $(patsubst %,CONFIG_PACKAGE_%,$(ZNC_MODULES))
 
 include $(INCLUDE_DIR)/package.mk
 
-CONFIGURE_VARS += \
-	CXXFLAGS="$(TARGET_CFLAGS) -fno-builtin" \
-	CPPFLAGS="-I$(STAGING_DIR)/usr/include -I$(STAGING_DIR)/include" \
-	LDFLAGS="-nodefaultlibs -lc -L$(STAGING_DIR)/usr/lib -L$(STAGING_DIR)/lib" \
-	LIBS="-lstdc++ -lm -lssl -lcrypto $(LIBGCC_S) -lc"
-
 CONFIGURE_ARGS += \
 	$(if $(CONFIG_ZNC_ICU), --enable-charset, --disable-charset) \
 	--disable-cyrus \
@@ -298,11 +292,6 @@ CONFIGURE_ARGS += \
 	--disable-tcl \
 	--enable-tdns \
 	--enable-zlib
-
-define Build/Configure
-	$(call Build/Configure/Default,)
-	$(call libtool_disable_rpath)
-endef
 
 define Build/Compile
 	$(call Build/Compile/Default,znc)

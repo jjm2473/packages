@@ -52,12 +52,13 @@ validate_service_options() {
 		'checkHost:list(host)' \
 		'checkIP:list(ipaddr)' \
 		'ciphers:list(string)' \
+		'ciphersuites:list(string)' \
 		'client:bool' \
 		'config:list(string)' \
 		'connect:list(string)' \
 		'CRLfile:string' \
 		'CRLpath:string' \
-		'curve:string' \
+		'curves:list(string)' \
 		'debug:or(range(0,7),string)' \
 		'delay:bool' \
 		'engineId:string' \
@@ -100,6 +101,8 @@ validate_service_options() {
 		'socket:list(string)' \
 		'sslVersion:or("all","SSLv2","SSLv3","TLSv1","TLSv1.1","TLSv1.2")' \
 		'stack:uinteger' \
+		'ticketKeySecret:string' \
+		'ticketMacSecret:string' \
 		'TIMEOUTbusy:uinteger' \
 		'TIMEOUTclose:uinteger' \
 		'TIMEOUTconnect:uinteger' \
@@ -232,7 +235,6 @@ print_service_options() {
 		cert \
 		CRLfile \
 		CRLpath \
-		curve \
 		debug \
 		logId \
 		engineId \
@@ -259,6 +261,8 @@ print_service_options() {
 		setuid \
 		sslVersion \
 		stack \
+		ticketKeySecret \
+		ticketMacSecret \
 		TIMEOUTbusy \
 		TIMEOUTclose \
 		TIMEOUTconnect \
@@ -294,6 +298,8 @@ print_service_options() {
 
 	print_lists_reduce : \
 		ciphers \
+		curves \
+		ciphersuites \
 		;
 
 	print_host_port \
