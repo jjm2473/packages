@@ -57,8 +57,9 @@ MESON_ARGS += \
 	-Dudev=false
 
 define Build/InstallDev
-	$(INSTALL_DIR) $(1)/usr/include
+	$(INSTALL_DIR) $(1)/usr/include/libdrm
 	$(CP) $(PKG_INSTALL_DIR)/usr/include/*.h $(1)/usr/include/
+	$(CP) $(PKG_INSTALL_DIR)/usr/include/libdrm/*.h $(1)/usr/include/libdrm/
 	$(INSTALL_DIR) $(1)/usr/lib
 	$(CP) $(PKG_INSTALL_DIR)/usr/lib/libdrm.so* $(1)/usr/lib/
 	$(INSTALL_DIR) $(1)/usr/lib/pkgconfig
