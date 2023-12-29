@@ -7,6 +7,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=ddns-scripts
+PKG_FLAGS:=hold
 PKG_VERSION:=2.8.2
 PKG_RELEASE:=15
 
