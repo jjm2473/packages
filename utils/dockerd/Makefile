@@ -137,6 +137,9 @@ define Package/dockerd/install
 	$(INSTALL_DATA) ./files/etc/hotplug.d/iface/dockerd \
 		$(1)/etc/hotplug.d/iface/21-dockerd
 
+	$(INSTALL_DIR) $(1)/lib/fstab.d
+	$(INSTALL_DATA) ./files/lib/fstab.d/dockerd.sh $(1)/lib/fstab.d/dockerd.sh
+
 endef
 
 define Package/dockerd/postinst
