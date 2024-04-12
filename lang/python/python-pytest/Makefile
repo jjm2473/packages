@@ -34,7 +34,7 @@ define Package/python3-pytest
 	+python3 \
 	+python3-pluggy \
 	+python3-packaging \
-	+python3-tomli \
+	+python3-toml \
 	+python3-exceptiongroup \
 	+python3-iniconfig
 endef
