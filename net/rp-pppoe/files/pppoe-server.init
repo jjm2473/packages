@@ -39,7 +39,8 @@ pppoe_instance() {
 	. /etc/default/pppoe-server
     else
 	. /lib/functions/network.sh
-	network_get_physdev device $interface || return 1
+	network_get_physdev device $interface || device=$interface
+    [ -n "$device" ] || return 1
 	[ -n "$ac_name" ] && append OPTIONS "-C $ac_name"
 	for service_name in $service_names; do
 	    append OPTIONS "-S $service_name"
