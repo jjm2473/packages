@@ -240,6 +240,14 @@ start_service() {
 }
 
 reload_service() {
+	if [ -f "${DOCKERD_CONF}" -a -f /etc/config/dockerd ]; then
+		local oldroot=`jsonfilter -i "${DOCKERD_CONF}" -e @[\"data-root\"]`
+		local newroot=`uci get dockerd.globals.data_root`
+		if [ "$oldroot" != "$newroot" ]; then
+			restart
+			return 0
+		fi
+	fi
 	process_config
 	procd_send_signal dockerd
 }
