@@ -220,6 +220,11 @@ process_config() {
 		json_close_object
 	fi
 	[ "${max_concurrent_downloads:-0}" -eq "0" ] || json_add_int "max-concurrent-downloads" "${max_concurrent_downloads}"
+	json_add_string "log-driver" "json-file"
+	json_add_object "log-opts"
+	json_add_string "max-size" "50m"
+	json_add_string "max-file" "2"
+	json_close_object
 	json_dump > "${DOCKERD_CONF}"
 
 	[ "${iptables}" -eq "1" ] && config_foreach iptables_add_blocking_rule firewall
