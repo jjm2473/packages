@@ -160,6 +160,9 @@ define Package/dockerd/install
 	$(INSTALL_DIR) $(1)/etc/sysctl.d
 	$(INSTALL_DATA) ./files/etc/sysctl.d/sysctl-br-netfilter-ip.conf \
 		$(1)/etc/sysctl.d/12-br-netfilter-ip.conf
+
+	$(INSTALL_DIR) $(1)/lib/fstab.d
+	$(INSTALL_DATA) ./files/lib/fstab.d/dockerd.sh $(1)/lib/fstab.d/dockerd.sh
 endef
 
 define Package/dockerd/postinst
