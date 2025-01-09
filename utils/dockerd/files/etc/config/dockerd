@@ -20,6 +20,7 @@ config globals 'globals'
 #	list dns '172.17.0.1'
 #	list registry_mirrors 'https://<my-docker-mirror-host>'
 #	list registry_mirrors 'https://hub.docker.com'
+#	option max_concurrent_downloads '2'
 
 # If your organization uses a proxy server to connect to the internet, you may need to configure the proxy.
 # See https://docs.docker.com/engine/daemon/proxy/ for more details

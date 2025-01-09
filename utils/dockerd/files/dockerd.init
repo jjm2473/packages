@@ -189,6 +189,7 @@ process_config() {
 	config_get http_proxy proxies http_proxy "${http_proxy}"
 	config_get https_proxy proxies https_proxy "${https_proxy}"
 	config_get no_proxy proxies no_proxy "${no_proxy}"
+	config_get max_concurrent_downloads globals max_concurrent_downloads ""
 
 	. /usr/share/libubox/jshn.sh
 	json_init
@@ -218,6 +219,7 @@ process_config() {
 		[ -z "${no_proxy}" ] || json_add_string "no-proxy" "${no_proxy}"
 		json_close_object
 	fi
+	[ "${max_concurrent_downloads:-0}" -eq "0" ] || json_add_int "max-concurrent-downloads" "${max_concurrent_downloads}"
 	json_dump > "${DOCKERD_CONF}"
 
 	[ "${iptables}" -eq "1" ] && config_foreach iptables_add_blocking_rule firewall
