@@ -8,8 +8,9 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=davfs2
+PKG_FLAGS:=hold
 PKG_VERSION:=1.6.1
-PKG_RELEASE:=2
+PKG_RELEASE:=3
 
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
 PKG_SOURCE_URL:=@SAVANNAH/davfs2
@@ -65,6 +66,9 @@ define Package/davfs2/install
 	$(INSTALL_DIR) $(1)/usr/sbin
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/src/mount.davfs $(1)/usr/sbin/
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/src/umount.davfs $(1)/usr/sbin/
+	$(INSTALL_DIR) $(1)/sbin/fs
+	$(LN) /usr/sbin/mount.davfs $(1)/sbin/fs/mount.davfs
+	$(LN) /usr/sbin/umount.davfs $(1)/sbin/fs/umount.davfs
 	$(INSTALL_DIR) $(1)/etc
 	$(INSTALL_DIR) $(1)/etc/davfs2
 	$(INSTALL_DATA) files/$(PKG_NAME).conf $(1)/etc/davfs2
