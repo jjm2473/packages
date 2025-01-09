@@ -223,6 +223,11 @@ process_config() {
 	[ -z "${storage_driver}" ] || json_add_string "storage-driver" "${storage_driver}"
 
 	[ "${max_concurrent_downloads}" -eq "0" ] || json_add_int "max-concurrent-downloads" "${max_concurrent_downloads}"
+	json_add_string "log-driver" "json-file"
+	json_add_object "log-opts"
+	json_add_string "max-size" "50m"
+	json_add_string "max-file" "2"
+	json_close_object
 
 	json_dump > "${DOCKERD_CONF}"
 
