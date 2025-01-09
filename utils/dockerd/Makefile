@@ -34,6 +34,7 @@ define Package/dockerd
   TITLE:=Docker Community Edition Daemon
   URL:=https://www.docker.com/
   DEPENDS:=$(GO_ARCH_DEPENDS) \
+    +jsonfilter \
     +ca-certificates \
     +containerd \
     +iptables \
