@@ -166,7 +166,8 @@ define Package/dockerd/install
 	$(INSTALL_DIR) $(1)/etc/uci-defaults
 	$(INSTALL_DATA) ./files/etc/uci-defaults/16_docker-netifd-migrate \
 		$(1)/etc/uci-defaults/16_docker-netifd-migrate
-
+	$(INSTALL_DATA) ./files/etc/uci-defaults/17_docker-fw4 \
+		$(1)/etc/uci-defaults/17_docker-fw4
 endef
 
 define Package/dockerd/postinst
