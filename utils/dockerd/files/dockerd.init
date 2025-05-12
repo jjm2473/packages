@@ -68,27 +68,27 @@ uciadd() {
 
 	config_load firewall
 	forwarding_section=""
-	config_foreach check_forwarding forwarding docker wan
+	config_foreach check_forwarding forwarding ${zone} wan
 	[[ -n "${forwarding_section}" ]] || {
-		uci_quiet set firewall.docker_to_wan=forwarding
-		uci_quiet set firewall.docker_to_wan.src=docker
-		uci_quiet set firewall.docker_to_wan.dest=wan
+		uci_quiet set firewall.${zone}_to_wan=forwarding
+		uci_quiet set firewall.${zone}_to_wan.src=${zone}
+		uci_quiet set firewall.${zone}_to_wan.dest=wan
 	}
 
 	forwarding_section=""
-	config_foreach check_forwarding forwarding docker lan
+	config_foreach check_forwarding forwarding ${zone} lan
 	[[ -n "${forwarding_section}" ]] || {
-		uci_quiet set firewall.docker_to_lan=forwarding
-		uci_quiet set firewall.docker_to_lan.src=docker
-		uci_quiet set firewall.docker_to_lan.dest=lan
+		uci_quiet set firewall.${zone}_to_lan=forwarding
+		uci_quiet set firewall.${zone}_to_lan.src=${zone}
+		uci_quiet set firewall.${zone}_to_lan.dest=lan
 	}
 
 	forwarding_section=""
-	config_foreach check_forwarding forwarding lan docker
+	config_foreach check_forwarding forwarding lan ${zone}
 	[[ -n "${forwarding_section}" ]] || {
-		uci_quiet set firewall.lan_to_docker=forwarding
-		uci_quiet set firewall.lan_to_docker.src=lan
-		uci_quiet set firewall.lan_to_docker.dest=docker
+		uci_quiet set firewall.lan_to_${zone}=forwarding
+		uci_quiet set firewall.lan_to_${zone}.src=lan
+		uci_quiet set firewall.lan_to_${zone}.dest=${zone}
 	}
 	uci_quiet commit firewall
 
@@ -114,9 +114,9 @@ ucidel() {
 		if ! uci_quiet get firewall.${zone}.device; then
 			logger -t "dockerd-init" -p notice "Deleting firewall zone '${zone}' from firewall config"
 			uci_quiet delete firewall.${zone}
-			uci_quiet delete firewall.docker_to_wan
-			uci_quiet delete firewall.docker_to_lan
-			uci_quiet delete firewall.lan_to_docker
+			uci_quiet delete firewall.${zone}_to_wan
+			uci_quiet delete firewall.${zone}_to_lan
+			uci_quiet delete firewall.lan_to_${zone}
 		fi
 		uci_quiet commit firewall
 	fi
