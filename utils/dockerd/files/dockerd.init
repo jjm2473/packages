@@ -17,11 +17,6 @@ json_add_array_string() {
 	json_add_string "" "${1}"
 }
 
-boot() {
-	uciadd
-	rc_procd start_service
-}
-
 uciadd() {
 	local iface="${1}"
 	local device="${2}"
@@ -47,7 +42,12 @@ uciadd() {
 	# Add device to firewall zone
 	if uci_quiet get firewall.${zone}; then
 		uci_quiet del_list firewall.${zone}.device="${device}"
-		uci_quiet add_list firewall.${zone}.device="${device}"
+		if [ docker0 = "$device" ]; then
+			uci_quiet del_list firewall.${zone}.subnet="172.16.0.0/12"
+			uci_quiet add_list firewall.${zone}.subnet="172.16.0.0/12"
+		else
+			uci_quiet add_list firewall.${zone}.device="${device}"
+		fi
 		uci_quiet commit firewall
 	fi
 
