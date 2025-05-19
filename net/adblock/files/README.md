@@ -17,7 +17,6 @@ A lot of people already use adblocker plugins within their desktop browsers, but
 | android_tracking    |         | S    | tracking         | [Link](https://github.com/Perflyst/PiHoleBlocklist)                               |
 | andryou             |         | L    | compilation      | [Link](https://gitlab.com/andryou/block/-/blob/master/readme.md)                  |
 | anti_ad             |         | L    | compilation      | [Link](https://github.com/privacy-protection-tools/anti-AD/blob/master/README.md) |
-| antipopads          |         | L    | compilation      | [Link](https://github.com/AdroitAdorKhan/antipopads-re)                           |
 | anudeep             |         | M    | compilation      | [Link](https://github.com/anudeepND/blacklist)                                    |
 | bitcoin             |         | S    | mining           | [Link](https://github.com/hoshsadiq/adblock-nocoin-list)                          |
 | certpl              |         | L    | phishing         | [Link](https://cert.pl/en/warning-list/)                                          |
@@ -26,6 +25,9 @@ A lot of people already use adblocker plugins within their desktop browsers, but
 | doh_blocklist       |         | S    | doh_server       | [Link](https://github.com/dibdot/DoH-IP-blocklists)                               |
 | easylist            |         | M    | compilation      | [Link](https://easylist.to)                                                       |
 | easyprivacy         |         | M    | tracking         | [Link](https://easylist.to)                                                       |
+| energized_blu       |         | XL   | compilation      | [Link](https://energized.pro)                                                     |
+| energized_spark     |         | L    | compilation      | [Link](https://energized.pro)                                                     |
+| energized_ultimate  |         | XXL  | compilation      | [Link](https://energized.pro)                                                     |
 | firetv_tracking     |         | S    | tracking         | [Link](https://github.com/Perflyst/PiHoleBlocklist)                               |
 | games_tracking      |         | S    | tracking         | [Link](https://www.gameindustry.eu)                                               |
 | hagezi              |         | VAR  | compilation      | [Link](https://github.com/hagezi/dns-blocklists)                                  |
@@ -156,7 +158,7 @@ Available commands:
 | adb_enabled        | 1, enabled                         | set to 0 to disable the adblock service                                                        |
 | adb_srcarc         | -, /etc/adblock/adblock.sources.gz | full path to the used adblock source archive                                                   |
 | adb_srcfile        | -, /tmp/adb_sources.json           | full path to the used adblock source file, which has a higher precedence than the archive file |
-| adb_dns            | -, auto-detected                   | 'dnsmasq', 'unbound', 'named', 'kresd' or 'raw'                                                |
+| adb_dns            | -, auto-detected                   | 'dnsmasq', 'unbound', 'named', 'kresd', 'smartdns' or 'raw'                                    |
 | adb_fetchutil      | -, auto-detected                   | 'uclient-fetch', 'wget', 'curl' or 'aria2c'                                                    |
 | adb_fetchparm      | -, auto-detected                   | manually override the config options for the selected download utility                         |
 | adb_fetchinsecure  | 0, disabled                        | don't check SSL server certificates during download                                            |
@@ -191,7 +193,6 @@ Available commands:
 | adb_mailsender     | no-reply@adblock                   | sender address for adblock notification E-Mails                                                |
 | adb_mailtopic      | adblock&nbsp;notification          | topic for adblock notification E-Mails                                                         |
 | adb_mailprofile    | adb_notify                         | mail profile used in 'msmtp' for adblock notification E-Mails                                  |
-| adb_mailcnt        | 0                                  | minimum domain count to trigger E-Mail notifications                                           |
 | adb_jail           | 0                                  | set to 1 to enable the additional, restrictive 'adb_list.jail' creation                        |
 | adb_jaildir        | /tmp                               | path for the generated jail list                                                               |
 

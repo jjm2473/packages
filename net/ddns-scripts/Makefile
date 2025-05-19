@@ -9,7 +9,7 @@ include $(TOPDIR)/rules.mk
 PKG_NAME:=ddns-scripts
 PKG_FLAGS:=hold
 PKG_VERSION:=2.8.2
-PKG_RELEASE:=53
+PKG_RELEASE:=64
 
 PKG_LICENSE:=GPL-2.0
 
@@ -153,6 +153,17 @@ endef
 
 define Package/ddns-scripts-dnspod/description
   Dynamic DNS Client scripts extension for dnspod.cn API (require curl)
+endef
+
+
+define Package/ddns-scripts-dnspod-v3
+  $(call Package/ddns-scripts/Default)
+  TITLE:=Extension for dnspod.tencentcloudapi.com (aka: dnspod.cn) API v3
+  DEPENDS:=ddns-scripts +curl +openssl-util
+endef
+
+define Package/ddns-scripts-dnspod-v3/description
+  Dynamic DNS Client scripts extension for dnspod.tencentcloudapi.com API v3 (require curl)
 endef
 
 
@@ -352,6 +363,10 @@ define Package/ddns-scripts/install
 	$(INSTALL_DIR) $(1)/usr/bin
 	$(INSTALL_BIN) ./files/usr/bin/ddns.sh \
 		$(1)/usr/bin/ddns
+
+	$(INSTALL_DIR) $(1)/etc/uci-defaults
+	$(INSTALL_DATA) ./files/etc/uci-defaults/50-ddns-migrate-retry-count \
+		$(1)/etc/uci-defaults/
 endef
 
 define Package/ddns-scripts/postinst
@@ -386,6 +401,7 @@ define Package/ddns-scripts-services/install
 	rm $(1)/usr/share/ddns/default/godaddy.com-v1.json
 	rm $(1)/usr/share/ddns/default/digitalocean.com-v2.json
 	rm $(1)/usr/share/ddns/default/dnspod.cn.json
+	rm $(1)/usr/share/ddns/default/dnspod.cn-v3.json
 	rm $(1)/usr/share/ddns/default/no-ip.com.json
 	rm $(1)/usr/share/ddns/default/bind-nsupdate.json
 	rm $(1)/usr/share/ddns/default/route53-v1.json
@@ -534,6 +550,25 @@ define Package/ddns-scripts-dnspod/install
 endef
 
 define Package/ddns-scripts-dnspod/prerm
+#!/bin/sh
+if [ -z "$${IPKG_INSTROOT}" ]; then
+	/etc/init.d/ddns stop
+fi
+exit 0
+endef
+
+
+define Package/ddns-scripts-dnspod-v3/install
+	$(INSTALL_DIR) $(1)/usr/lib/ddns
+	$(INSTALL_BIN) ./files/usr/lib/ddns/update_dnspod_cn_v3.sh \
+		$(1)/usr/lib/ddns
+
+	$(INSTALL_DIR) $(1)/usr/share/ddns/default
+	$(INSTALL_DATA) ./files/usr/share/ddns/default/dnspod.cn-v3.json \
+		$(1)/usr/share/ddns/default/
+endef
+
+define Package/ddns-scripts-dnspod-v3/prerm
 #!/bin/sh
 if [ -z "$${IPKG_INSTROOT}" ]; then
 	/etc/init.d/ddns stop
@@ -761,6 +796,7 @@ $(eval $(call BuildPackage,ddns-scripts-freedns))
 $(eval $(call BuildPackage,ddns-scripts-godaddy))
 $(eval $(call BuildPackage,ddns-scripts-digitalocean))
 $(eval $(call BuildPackage,ddns-scripts-dnspod))
+$(eval $(call BuildPackage,ddns-scripts-dnspod-v3))
 $(eval $(call BuildPackage,ddns-scripts-noip))
 $(eval $(call BuildPackage,ddns-scripts-nsupdate))
 $(eval $(call BuildPackage,ddns-scripts-route53))
