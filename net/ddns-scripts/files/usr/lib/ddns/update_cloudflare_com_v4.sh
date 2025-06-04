@@ -31,12 +31,16 @@ local __HOST __DOMAIN __TYPE __URLBASE __PRGBASE __RUNPROG __DATA __IPV6 __ZONEI
 local __URLBASE="https://api.cloudflare.com/client/v4"
 local __TTL=120
 
-# split __HOST __DOMAIN from $domain
-# given data:
-# @example.com for "domain record"
-# host.sub@example.com for a "host record"
-__HOST=$(printf %s "$domain" | cut -d@ -f1)
-__DOMAIN=$(printf %s "$domain" | cut -d@ -f2)
+if echo "$domain" | grep -Fq '@'; then
+	# split __HOST __DOMAIN from $domain
+	# given data:
+	# @example.com for "domain record"
+	# host.sub@example.com for a "host record"
+	__HOST=$(printf %s "$domain" | cut -d@ -f1)
+	__DOMAIN=$(printf %s "$domain" | cut -d@ -f2)
+else
+	__DOMAIN=$domain
+fi
 
 # Cloudflare v4 needs:
 # __DOMAIN = the base domain i.e. example.com
