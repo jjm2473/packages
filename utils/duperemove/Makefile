@@ -17,10 +17,6 @@ PKG_MAINTAINER:=Mark Fasheh
 PKG_LICENSE:=GPL-2.0
 PKG_LICENSE_FILES:=LICENSE
 
-# Set variables used in the source's Makefile
-export VERSION="$(PKG_VERSION)"
-export IS_RELEASE=1
-
 include $(INCLUDE_DIR)/package.mk
 
 define Package/duperemove
@@ -56,5 +52,8 @@ define Package/duperemove/install
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/hashstats $(1)/usr/bin
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/btrfs-extent-same $(1)/usr/bin
 endef
+
+# Set variables used in the source's Makefile
+MAKE_FLAGS+= VERSION="$(PKG_VERSION)" IS_RELEASE=1
 
 $(eval $(call BuildPackage,duperemove))
