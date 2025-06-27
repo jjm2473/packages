@@ -7,7 +7,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=libdrm
 PKG_VERSION:=2.4.120
-PKG_RELEASE:=1
+PKG_RELEASE:=2
 
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.xz
 PKG_SOURCE_URL:=https://dri.freedesktop.org/libdrm
@@ -17,6 +17,7 @@ PKG_MAINTAINER:=Lucian Cristian <lucian.cristian@gmail.com>
 PKG_LICENSE:=BSD-3-Clause
 
 PKG_CONFIG_DEPENDS:= \
+	CONFIG_LIBDRM_AMDGPU \
 	CONFIG_LIBDRM_INTEL \
 	CONFIG_LIBDRM_NOUVEAU \
 	CONFIG_LIBDRM_RADEON
@@ -45,7 +46,7 @@ endef
 MESON_ARGS += \
 	-Dintel=$(if $(CONFIG_LIBDRM_INTEL),en,dis)abled \
 	-Dradeon=$(if $(CONFIG_LIBDRM_RADEON),en,dis)abled \
-	-Damdgpu=disabled \
+	-Damdgpu=$(if $(CONFIG_LIBDRM_AMDGPU),en,dis)abled \
 	-Dnouveau=$(if $(CONFIG_LIBDRM_NOUVEAU),en,dis)abled \
 	-Dvmwgfx=disabled \
 	-Domap=disabled \

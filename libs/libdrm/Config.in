@@ -1,6 +1,13 @@
 menu "Select libdrm build options"
 		depends on PACKAGE_libdrm
 
+config LIBDRM_AMDGPU
+	bool "AMDGPU support"
+	default y
+	depends on x86_64 || i386 || loongarch64
+	help
+		Installs the AMDGPU driver.
+
 config LIBDRM_INTEL
 	bool "Intel support"
 	default y
