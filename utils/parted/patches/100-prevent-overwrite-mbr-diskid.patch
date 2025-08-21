@@ -1,0 +1,33 @@
+diff --git a/libparted/labels/dos.c b/libparted/labels/dos.c
+index e6a0105..90bbb65 100644
+--- a/libparted/labels/dos.c
++++ b/libparted/labels/dos.c
+@@ -39,6 +39,7 @@
+  * the source, and how to build it
+  */
+ 
++#if 0
+ static const char MBR_BOOT_CODE[] = {
+ 	0xfa, 0xb8, 0x00, 0x10, 0x8e, 0xd0, 0xbc, 0x00,
+ 	0xb0, 0xb8, 0x00, 0x00, 0x8e, 0xd8, 0x8e, 0xc0,
+@@ -51,6 +52,7 @@ static const char MBR_BOOT_CODE[] = {
+ 	0x4c, 0x02, 0xcd, 0x13, 0xea, 0x00, 0x7c, 0x00,
+ 	0x00, 0xeb, 0xfe
+ };
++#endif
+ 
+ #define MSDOS_MAGIC		0xAA55
+ #define PARTITION_MAGIC_MAGIC	0xf6f6
+@@ -1443,10 +1445,12 @@ msdos_write (const PedDisk* disk)
+ 		return 0;
+ 	DosRawTable *table = (DosRawTable *) s0;
+ 
++#if 0
+ 	if (!table->boot_code[0]) {
+ 		memset (table, 0, 512);
+ 		memcpy (table->boot_code, MBR_BOOT_CODE, sizeof (MBR_BOOT_CODE));
+ 	}
++#endif
+ 
+ 	/* If there is no unique identifier, generate a random one */
+ 	if (!table->mbr_signature)
