@@ -11,7 +11,7 @@ include $(TOPDIR)/rules.mk
 PKG_NAME:=LVM2
 PKG_VERSION:=2.03.33
 PKG_VERSION_DM:=1.02.207
-PKG_RELEASE:=2
+PKG_RELEASE:=3
 
 PKG_SOURCE:=$(PKG_NAME).$(PKG_VERSION).tgz
 PKG_SOURCE_URL:=https://sourceware.org/pub/lvm2 \
@@ -128,6 +128,7 @@ define Build/InstallDev
 	$(CP) $(PKG_INSTALL_DIR)/usr/lib/libdevmapper.so* $(1)/usr/lib
 	$(INSTALL_DIR) $(1)/usr/lib/pkgconfig
 	$(CP) $(PKG_BUILD_DIR)/libdm/libdevmapper.pc $(1)/usr/lib/pkgconfig
+	$(LN) libdevmapper.pc $(1)/usr/lib/pkgconfig/devmapper.pc
 endef
 
 define Package/libdevmapper/install
