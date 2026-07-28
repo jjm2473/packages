@@ -4,7 +4,7 @@
 # Tests helper functions, validation logic, dnsmasq integration,
 # and UCI migration by mocking OpenWrt's rc.common framework.
 #
-# Usage: cd source.openwrt.melmac.ca/https-dns-proxy && bash tests/run_tests.sh
+# Usage: cd source.mossdef.org/https-dns-proxy && bash tests/run_tests.sh
 
 set -o pipefail
 
@@ -529,6 +529,44 @@ assert_eq "xappend adds parameter" " -r https://dns.google/dns-query" "$PROG_par
 xappend "-p 5053"
 assert_eq "xappend appends parameter" " -r https://dns.google/dns-query -p 5053" "$PROG_param"
 
+printf "\n##\n## 07b: append_boot (force_ip_family)\n##\n\n"
+
+rm -f "$__uci_store"/*
+__cfg_package="https-dns-proxy"
+uci_set "https-dns-proxy" "inst" "bootstrap_dns" "1.1.1.1,2606:4700:4700::1111"
+
+# auto: keep both families, no -4
+PROG_param=""; force_ip_family="auto"
+append_boot "inst" 'bootstrap_dns' '-b' "$DEFAULT_BOOTSTRAP"
+assert_eq "append_boot auto keeps both families, no -4" " -b 1.1.1.1,2606:4700:4700::1111" "$PROG_param"
+
+# ipv4: v4 only + -4
+PROG_param=""; force_ip_family="ipv4"
+append_boot "inst" 'bootstrap_dns' '-b' "$DEFAULT_BOOTSTRAP"
+assert_eq "append_boot ipv4 keeps v4 and adds -4" " -b 1.1.1.1 -4" "$PROG_param"
+
+# ipv6: v6 only, no -4
+PROG_param=""; force_ip_family="ipv6"
+append_boot "inst" 'bootstrap_dns' '-b' "$DEFAULT_BOOTSTRAP"
+assert_eq "append_boot ipv6 keeps v6, no -4" " -b 2606:4700:4700::1111" "$PROG_param"
+
+# forced ipv6 but config bootstrap has only v4 → fall back to CF/Google v6
+uci_set "https-dns-proxy" "v4only" "bootstrap_dns" "1.1.1.1,8.8.8.8"
+PROG_param=""; force_ip_family="ipv6"
+append_boot "v4only" 'bootstrap_dns' '-b' "$DEFAULT_BOOTSTRAP"
+assert_eq "append_boot ipv6 falls back to CF/Google v6" \
+	" -b 2606:4700:4700::1111,2606:4700:4700::1001,2001:4860:4860::8888,2001:4860:4860::8844" "$PROG_param"
+
+# forced ipv4 but config bootstrap has only v6 → fall back to CF/Google v4 + -4
+uci_set "https-dns-proxy" "v6only" "bootstrap_dns" "2606:4700:4700::1111"
+PROG_param=""; force_ip_family="ipv4"
+append_boot "v6only" 'bootstrap_dns' '-b' "$DEFAULT_BOOTSTRAP"
+assert_eq "append_boot ipv4 falls back to CF/Google v4 and adds -4" \
+	" -b 1.1.1.1,1.0.0.1,8.8.8.8,8.8.4.4 -4" "$PROG_param"
+
+unset force_ip_family
+rm -f "$__uci_store"/*
+
 printf "\n##\n## 08: UCI migration script\n##\n\n"
 
 MIGRATION_SCRIPT="./files/etc/uci-defaults/50-https-dns-proxy-migrate-options.sh"
@@ -541,7 +579,10 @@ config main 'config'
 	option wan6_trigger '0'
 	option procd_fw_src_interfaces 'lan'
 	option use_http1 '0'
-	option use_ipv6_resolvers_only '0'
+	option use_ipv6_resolvers_only '1'
+
+config https-dns-proxy 'disabled_family'
+	option force_ipv6_resolvers '0'
 CONF
 
 	# Run the migration sed commands against our test file
@@ -550,6 +591,8 @@ CONF
 	sed -i "s|procd_fw_src_interfaces|force_dns_src_interface|" "$MIGRATE_CONF"
 	sed -i "s|use_http1|force_http1|" "$MIGRATE_CONF"
 	sed -i "s|use_ipv6_resolvers_only|force_ipv6_resolvers|" "$MIGRATE_CONF"
+	sed -i "s|option force_ipv6_resolvers '1'|option force_ip_family 'ipv6'|" "$MIGRATE_CONF"
+	sed -i "/option force_ipv6_resolvers/d" "$MIGRATE_CONF"
 
 	grep -q "dnsmasq_config_update" "$MIGRATE_CONF"
 	assert_rc "migration: update_dnsmasq_config → dnsmasq_config_update" 0 $?
@@ -563,8 +606,17 @@ CONF
 	grep -q "force_http1" "$MIGRATE_CONF"
 	assert_rc "migration: use_http1 → force_http1" 0 $?
 
+	grep -q "option force_ip_family 'ipv6'" "$MIGRATE_CONF"
+	assert_rc "migration: enabled force_ipv6_resolvers → force_ip_family=ipv6" 0 $?
+
 	grep -q "force_ipv6_resolvers" "$MIGRATE_CONF"
-	assert_rc "migration: use_ipv6_resolvers_only → force_ipv6_resolvers" 0 $?
+	assert_rc "migration: force_ipv6_resolvers option retired" 1 $?
+
+	grep -qw "use_ipv6_resolvers_only" "$MIGRATE_CONF"
+	assert_rc "migration: old name use_ipv6_resolvers_only removed" 1 $?
+
+	[ "$(grep -c 'option force_ip_family' "$MIGRATE_CONF")" = "1" ]
+	assert_rc "migration: disabled force_ipv6_resolvers dropped (defaults to auto)" 0 $?
 
 	# Verify old names are gone
 	grep -q "update_dnsmasq_config" "$MIGRATE_CONF"
@@ -595,7 +647,7 @@ uci_set "https-dns-proxy" "config" "force_dns" "1"
 uci_set "https-dns-proxy" "config" "procd_trigger_wan6" "0"
 uci_set "https-dns-proxy" "config" "force_http1" "0"
 uci_set "https-dns-proxy" "config" "force_http3" "0"
-uci_set "https-dns-proxy" "config" "force_ipv6_resolvers" "0"
+uci_set "https-dns-proxy" "config" "force_ip_family" "auto"
 
 # Reset globals before load
 canary_domains_icloud=""
@@ -611,6 +663,7 @@ assert_eq "load_package_config: force_dns=1" "1" "$force_dns"
 assert_eq "load_package_config: global_user defaults to nobody" "nobody" "$global_user"
 assert_eq "load_package_config: global_group defaults to nogroup" "nogroup" "$global_group"
 assert_eq "load_package_config: global_listen_addr defaults to 127.0.0.1" "127.0.0.1" "$global_listen_addr"
+assert_eq "load_package_config: global_force_ip_family=auto" "auto" "$global_force_ip_family"
 
 # Canary domains should be populated
 echo "$canaryDomains" | grep -q "mask.icloud.com"
@@ -626,13 +679,25 @@ uci_set "https-dns-proxy" "config" "force_dns" "0"
 uci_set "https-dns-proxy" "config" "procd_trigger_wan6" "0"
 uci_set "https-dns-proxy" "config" "force_http1" "0"
 uci_set "https-dns-proxy" "config" "force_http3" "0"
-uci_set "https-dns-proxy" "config" "force_ipv6_resolvers" "0"
+uci_set "https-dns-proxy" "config" "force_ip_family" "auto"
 
 canaryDomains=""
 load_package_config
 
 assert_eq "load_package_config: canary disabled → canaryDomains empty" "" "$canaryDomains"
 assert_eq "load_package_config: force_dns=0 → unset" "" "$force_dns"
+
+printf "\n##\n## 9b: service_started/service_stopped exit code (issue #11)\n##\n\n"
+
+# These run only for the procd_set_config_changed side effect. When force_dns and
+# notrack_dns are both empty the guard test is false; without an explicit
+# 'return 0' the function's exit status (1) becomes the exit code of
+# start/reload/restart, so a successful restart wrongly reports failure.
+force_dns='' notrack_dns=''
+service_started; assert_rc "service_started returns 0 when force_dns/notrack_dns empty" 0 $?
+service_stopped; assert_rc "service_stopped returns 0 when force_dns/notrack_dns empty" 0 $?
+force_dns='1' notrack_dns=''
+service_started; assert_rc "service_started returns 0 when force_dns set" 0 $?
 
 printf "\n##\n## 10: notrack_nft (regression: missing nftables.d/ruleset-post dir)\n##\n\n"
 
@@ -703,6 +768,41 @@ __nft_rc=1
 notrack_nft remove
 assert_rc "notrack_nft remove succeeds when file and table both absent" 0 $?
 __nft_rc=0
+
+# ── nft binary absent: notrack_nft is a no-op ──
+# Without firewall4/nftables installed, the package should not error;
+# `command -v nft` returns non-zero and notrack_nft returns 0 immediately.
+rm -rf "$TESTDIR/usr/share"
+__saved_nft_def="$(typeset -f nft 2>/dev/null || declare -f nft)"
+unset -f nft
+mkdir -p "$TESTDIR/empty-path"
+__saved_path="$PATH"
+PATH="$TESTDIR/empty-path"
+
+notrack_nft update "53"
+assert_rc "notrack_nft update is a no-op when nft binary is absent" 0 $?
+
+[ ! -f "$NOTRACK_TEST_FILE" ]
+assert_rc "notrack_nft did not write snippet when nft is absent" 0 $?
+
+PATH="$__saved_path"
+eval "$__saved_nft_def"
+
+# ── mkdir failure path returns non-zero ──
+# Place a regular file at the would-be parent dir so mkdir -p must fail.
+# Defensive logic should return 1 instead of falling through to a broken
+# redirection.
+rm -rf "$TESTDIR/usr/share"
+mkdir -p "$(dirname "$(dirname "$NOTRACK_TEST_FILE")")"
+: > "$(dirname "$NOTRACK_TEST_FILE")"
+
+notrack_nft update "53" 2>/dev/null
+assert_rc "notrack_nft update returns 1 when parent dir cannot be created" 1 $?
+
+[ ! -f "$NOTRACK_TEST_FILE" ]
+assert_rc "notrack_nft did not write snippet on mkdir failure" 0 $?
+
+rm -f "$(dirname "$NOTRACK_TEST_FILE")"
 
 ###############################################################################
 #                         SHELL SCRIPT SYNTAX                                 #

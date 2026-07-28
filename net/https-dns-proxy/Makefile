@@ -2,13 +2,14 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=https-dns-proxy
-PKG_VERSION:=2026.03.18
-PKG_RELEASE:=3
+PKG_VERSION:=2026.05.06
+PKG_RELEASE:=1
+PKG_CPE_ID:=cpe:/a:mossdef:https-dns-proxy
 
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/aarond10/https_dns_proxy/
-PKG_MIRROR_HASH:=4c356c19b62fc7bdef3a67fd678e48f3659d709da10517c2eadef76e3409f5ce
-PKG_SOURCE_VERSION:=801881210ba8215dc9cd577222d8c10372423360
+PKG_MIRROR_HASH:=345f14e0a05e032754cea440f5e8798c6896cf5bc7cc12b3c7ed1c8d34e4daad
+PKG_SOURCE_VERSION:=0ba0525fa7c10115cc7c92e99621bfe484ae96e7
 
 PKG_MAINTAINER:=Stan Grishin <stangri@melmac.ca>
 PKG_LICENSE:=MIT
@@ -41,7 +42,7 @@ endef
 define Package/https-dns-proxy/description
 Light-weight DNS-over-HTTPS, non-caching translation proxy for the RFC 8484 DoH standard.
 It receives regular, unencrypted (UDP) DNS requests and resolves them via DoH resolver.
-Please see https://docs.openwrt.melmac.ca/https-dns-proxy/ for more information.
+Please see https://docs.mossdef.org/https-dns-proxy/ for more information.
 endef
 
 define Package/https-dns-proxy/conffiles
@@ -58,6 +59,8 @@ define Package/https-dns-proxy/install
 	$(INSTALL_CONF) ./files/etc/config/https-dns-proxy $(1)/etc/config/https-dns-proxy
 	$(INSTALL_DIR) $(1)/etc/uci-defaults/
 	$(INSTALL_BIN) ./files/etc/uci-defaults/50-https-dns-proxy-migrate-options.sh $(1)/etc/uci-defaults/50-https-dns-proxy-migrate-options.sh
+	$(INSTALL_DIR) $(1)/usr/share/nftables.d/ruleset-post
+	$(INSTALL_DATA) ./files/usr/share/nftables.d/ruleset-post/.placeholder $(1)/usr/share/nftables.d/ruleset-post/.placeholder
 endef
 
 $(eval $(call BuildPackage,https-dns-proxy))
