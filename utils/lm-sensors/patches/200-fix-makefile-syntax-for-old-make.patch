@@ -1,0 +1,36 @@
+--- a/Makefile
++++ b/Makefile
+@@ -174,10 +174,8 @@ ALL_LDFLAGS := $(LDFLAGS)
+ # Determine iconv linking requirements
+ # glibc has built-in iconv, other libc implementations may need -liconv
+ ifndef LIBICONV
+-  ICONV_TEST := $(shell printf '%s\n' \
+-    '#include <iconv.h>' \
+-    'int main() { iconv_t cd = iconv_open("UTF-8", "ASCII"); return 0; }' \
+-    | $(CC) $(ALL_CPPFLAGS) -x c - -o /tmp/lm_sensors_iconv_test 2>/dev/null && echo "builtin" || echo "external")
++  $(shell chmod 755 ./test-iconv.sh)
++  ICONV_TEST := $(shell ./test-iconv.sh $(CC) $(ALL_CPPFLAGS) -x c - -o /tmp/lm_sensors_iconv_test && echo "builtin" || echo "external" )
+
+   ifeq ($(ICONV_TEST),builtin)
+     LIBICONV :=
+--- a/prog/sensors/Module.mk
++++ b/prog/sensors/Module.mk
+@@ -39,10 +39,8 @@ REMOVESENSORSBIN := $(patsubst $(MODULE_
+ REMOVESENSORSMAN := $(patsubst $(MODULE_DIR)/%,$(DESTDIR)$(PROGSENSORSMAN1DIR)/%,$(PROGSENSORSMAN1FILES))
+ REMOVESENSORSZSH := $(patsubst $(MODULE_DIR)/%,$(DESTDIR)$(ZSHCOMPDIR)/%,$(PROGSENSORSZSHCOMPFILES))
+
+-LIBICONV := $(shell printf '%s\n' \
+-  '#include <iconv.h>' \
+-  'int main() { iconv_t cd = iconv_open("UTF-8", "ASCII"); return 0; }' \
+-  | $(CC) $(ALL_CPPFLAGS) -x c - 2>/dev/null && echo || echo \-liconv)
++$(shell chmod 755 ./test-iconv.sh)
++LIBICONV := $(shell ./test-iconv.sh $(CC) $(ALL_CPPFLAGS) -x c - && echo || echo \-liconv)
+
+ $(PROGSENSORSTARGETS): $(PROGSENSORSSOURCES:.c=.ro) lib/$(LIBDEP_FOR_PROGS)
+ 	$(CC) $(EXLDFLAGS) -o $@ $(PROGSENSORSSOURCES:.c=.ro) $(LIBICONV) -Llib -lsensors -lm
+--- /dev/null
++++ b/test-iconv.sh
+@@ -0,0 +1,3 @@
++#!/bin/sh
++
++printf '%s\n' '#include <iconv.h>' 'int main() { iconv_t cd = iconv_open("UTF-8", "ASCII"); return 0; }' | "$@" 2>/dev/null
