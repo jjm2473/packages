@@ -10,6 +10,7 @@
 #
 export LC_ALL=C
 export PATH="/usr/sbin:/usr/bin:/sbin:/bin"
+export GAWK_GNU_MATCHERS=1
 
 adb_enabled="0"
 adb_debug="0"
@@ -72,6 +73,7 @@ adb_geoparm=""
 adb_geourl="http://ip-api.com/json"
 adb_repiface=""
 adb_repport="53"
+adb_repfilter=""
 adb_repchunkcnt="5"
 adb_repchunksize="1"
 adb_represolve="0"
@@ -141,13 +143,16 @@ f_load() {
 		"${adb_awkcmd}" 'BEGIN{RS="";FS="\n"}{printf "%s, %s, %s %s (%s)",$1,$2,$3,$4,$5}')"
 
 	# detect cpu cores and available memory for memory-aware parallel processing
+	# 'mem_cores' is only calculated for auto-detected cores, a manually set 'adb_cores' is never capped
 	#
-	[ -z "${adb_cores}" ] && adb_cores="$("${adb_grepcmd}" -cm16 '^processor' /proc/cpuinfo 2>>"${adb_errorlog}")"
-	case "${adb_cores}" in 0 | *[!0-9]*) adb_cores="1" ;; esac
 	free_mem="$(f_mem)"
-	mem_cores="$((${free_mem} / 48))"
-	[ "${mem_cores}" -lt "1" ] && mem_cores="1"
-	[ "${adb_cores}" -gt "1" ] && [ "${mem_cores}" -lt "${adb_cores}" ] && adb_cores="${mem_cores}"
+	if [ -z "${adb_cores}" ]; then
+		adb_cores="$("${adb_grepcmd}" -cm16 '^processor' /proc/cpuinfo 2>>"${adb_errorlog}")"
+		mem_cores="$((${free_mem} / 48))"
+		[ "${mem_cores}" -lt "1" ] && mem_cores="1"
+	fi
+	case "${adb_cores}" in "" | 0 | *[!0-9]*) adb_cores="1" ;; esac
+	[ -n "${mem_cores}" ] && [ "${mem_cores}" -lt "${adb_cores}" ] && adb_cores="${mem_cores}"
 
 	# allocate at least 8 MiB of memory per core for sorting
 	#
@@ -197,6 +202,7 @@ f_load() {
 				filter="${filter}(udp port ${port}) or (tcp port ${port})"
 			done
 			tcpdump_filter="(${filter}) and greater 28"
+			[ -n "${adb_repfilter}" ] && tcpdump_filter="${tcpdump_filter} and (${adb_repfilter})"
 			if [ -n "${adb_repiface}" ] && [ -d "${adb_reportdir}" ]; then
 				(
 					"${adb_dumpcmd}" --immediate-mode -nn -p -s0 -i "${adb_repiface}" \
@@ -206,7 +212,11 @@ f_load() {
 				)
 				sleep 1
 				bg_pid="$("${adb_pgrepcmd}" -nf "${adb_reportdir}/adb_report.pcap")"
-				f_log "info" "tcpdump background process started for interface: ${adb_repiface}, port: ${adb_repport}, dir: ${adb_reportdir}, pid: ${bg_pid}"
+				if [ -n "${bg_pid}" ]; then
+					f_log "info" "tcpdump background process started for interface: ${adb_repiface}, port: ${adb_repport}, filter: ${adb_repfilter:-"-"}, dir: ${adb_reportdir}, pid: ${bg_pid}"
+				else
+					f_log "info" "tcpdump background process could not be started, please check the reporting filter: ${adb_repfilter:-"-"}"
+				fi
 			else
 				f_log "info" "please set the reporting interface 'adb_repiface' and reporting directory 'adb_reportdir' manually"
 			fi
@@ -228,12 +238,15 @@ f_env() {
 	json_init
 	if [ -s "${adb_customfeedfile}" ]; then
 		if json_load_file "${adb_customfeedfile}" >/dev/null 2>&1; then
-			return
-		else
-			f_log "info" "can't load adblock custom feed file"
+			json_get_keys feedlist
+			if [ -n "${feedlist}" ]; then
+				f_log "info" "adblock custom feed file loaded successfully"
+				return
+			fi
 		fi
 	fi
 	if [ -s "${adb_feedfile}" ] && json_load_file "${adb_feedfile}" >/dev/null 2>&1; then
+		f_log "info" "adblock default feed file loaded successfully"
 		return
 	else
 		f_log "err" "can't load adblock feed file"
@@ -306,34 +319,27 @@ f_chkdom() {
 
 	"${adb_awkcmd}" -v type="${type}" -v pre="${prefix}" -v col="${column}" -v chk="${adb_lookupdomain}" -F "${separator}" '
 	{
+		# check optional search prefix
+		if (pre != "" && index($0, pre) != 1) next
 		domain = $col
 		# remove carriage returns and trim the input
 		gsub(/\r|^[[:space:]]+|[[:space:]]+$/, "", domain)
 		# add www. for google safe search
-		if (type=="google" && domain ~ /^\.+/) { sub(/^\.+/, "", domain); domain="www."domain }
-		# check optional search prefix
-		if (pre != "" && index($0, pre) != 1) next
+		if (type == "google" && domain ~ /^\.+/) { sub(/^\.+/, "", domain); domain = "www." domain }
 		# skip empty lines, comments and special domains
 		if (domain == "" || domain ~ /^(#|localhost|loopback)/ || index(domain, chk) == 1) next
-		# no domain with trailing dot
-		if (substr(domain, length(domain), 1) == ".") next
 		# check total length (253 characters)
-		if (length(domain) > 253) next
-		n = split(domain, L, ".")
-		valid = 1
-		for (i = 1; i <= n; i++) {
-			l = L[i]
-			len = length(l)
-			# label length 1–63
-			if (len < 1 || len > 63) { valid = 0; break }
-			# no leading/trailing hyphen
-			if (l ~ /^-/ || l ~ /-$/) { valid = 0; break }
-			# ASCII + hyphen
-			if (l !~ /^[A-Za-z0-9-]+$/) { valid = 0; break }
+		len = length(domain)
+		if (len > 253) next
+		domain = tolower(domain)
+		# ASCII + hyphen, no empty label, no leading/trailing hyphen, no trailing dot, TLD starts with a letter
+		if (domain !~ /^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)*[a-z]([a-z0-9-]*[a-z0-9])?$/) next
+		# label length 1–63, can only be exceeded by domains longer than 63 characters
+		if (len > 63) {
+			n = split(domain, L, ".")
+			for (i = 1; i <= n; i++) if (length(L[i]) > 63) next
 		}
-		# TLD must start with a letter or "xn--"
-		if (valid && L[n] !~ /^[A-Za-z]/ && L[n] !~ /^xn--/) valid = 0
-		if (valid) print tolower(domain)
+		print domain
 	}'
 
 	f_log "debug" "f_chkdom ::: name: ${src_name}, type: ${type}, prefix: ${prefix:-"-"}, column: ${column:-"-"}, separator: ${separator:-"-"}"
@@ -404,7 +410,22 @@ f_dns() {
 		adb_dnssafesearch="1"
 		adb_dnsstop="address=/#/\nlocal=/#/"
 		f_dnsdeny() {
-			"${adb_awkcmd}" '{print "local=/"$0"/"}' "${@}"
+			"${adb_awkcmd}" '
+				{
+					if (len > 0 && len + length($0) + 1 > 1000) {
+						print line
+						len = 0
+					}
+					if (len == 0) {
+						line = "local=/" $0 "/"
+						len = length(line)
+					} else {
+						line = line $0 "/"
+						len += length($0) + 1
+					}
+				}
+				END { if (len > 0) print line }
+			' "${@}"
 		}
 		f_dnsallow() {
 			"${adb_awkcmd}" '{print "local=/"$0"/#"}' "${@}"
@@ -537,7 +558,8 @@ f_dns() {
 		for dir in "${adb_dnsdir:-"/tmp"}" "${adb_backupdir:-"/tmp"}"; do
 			[ ! -d "${dir}" ] && mkdir -p "${dir}"
 		done
-		if [ "${adb_action}" != "search" ] && [ "${adb_action}" != "report" ]; then
+		if [ "${adb_action}" != "search" ] && [ "${adb_action}" != "report" ] &&
+			[ "${adb_action}" != "suspend" ] && [ "${adb_action}" != "resume" ]; then
 			if [ "${adb_dnsflush}" = "1" ] || [ "${free_mem:-"0"}" -lt "64" ]; then
 				printf '%b' "${adb_dnsheader}" >"${adb_finaldir}/${adb_dnsfile}"
 				f_dnsup
@@ -609,20 +631,20 @@ f_fetch() {
 	case "${adb_fetchcmd##*/}" in
 	"curl")
 		[ "${adb_fetchinsecure}" = "1" ] && insecure="--insecure"
-		adb_fetchparm="${adb_fetchparm:-"${insecure} --connect-timeout 20 --retry-delay 10 --retry $((adb_fetchretry - 1)) --retry-max-time $(((adb_fetchretry - 1) * 20)) --retry-all-errors --fail --silent --show-error --location -o"}"
-		adb_etagparm="--connect-timeout 5 --silent --location --head"
-		adb_geoparm="--connect-timeout 5 --silent --location"
+		adb_fetchparm="${adb_fetchparm:-"${insecure} --connect-timeout 20 --speed-time 20 --retry-delay 10 --retry $((adb_fetchretry - 1)) --retry-all-errors --fail --silent --globoff --show-error --location -o"}"
+		adb_etagparm="${insecure} --connect-timeout 5 --max-time 10 --fail --silent --globoff --location --head"
+		adb_geoparm="${insecure} --connect-timeout 5 --max-time 10 --fail --silent --globoff --show-error --location"
 		;;
 	"wget")
 		[ "${adb_fetchinsecure}" = "1" ] && insecure="--no-check-certificate"
 		adb_fetchparm="${adb_fetchparm:-"${insecure} --no-cache --no-cookies --timeout=20 --waitretry=10 --tries=${adb_fetchretry} --retry-connrefused -O"}"
-		adb_etagparm="--timeout=5 --spider --server-response"
-		adb_geoparm="--timeout=5 --quiet -O-"
+		adb_etagparm="${insecure} --tries=1 --timeout=5 --spider --server-response"
+		adb_geoparm="${insecure} --tries=1 --timeout=5 --quiet -O-"
 		;;
 	"uclient-fetch")
 		[ "${adb_fetchinsecure}" = "1" ] && insecure="--no-check-certificate"
 		adb_fetchparm="${adb_fetchparm:-"${insecure} --timeout=20 -O"}"
-		adb_geoparm="--timeout=5 --quiet -O-"
+		adb_geoparm="${insecure} --timeout=5 --quiet -O-"
 		;;
 	esac
 
@@ -698,8 +720,8 @@ f_count() {
 			for file in "${adb_tmpdir}/tmp.safesearch".*; do
 				[ -s "${file}" ] && files="${files} ${file}"
 			done
-			adb_cnt="$("${adb_awkcmd}" -v hdr="${adb_dnsheader}" '
-				NR == FNR { main++; next }
+			adb_cnt="$("${adb_awkcmd}" -v hdr="${adb_dnsheader}" -v dns="${adb_dns}" '
+				NR == FNR { main += (dns == "dnsmasq" ? split($0, seg, "/") - 2 : 1); next }
 				{ sub_cnt++ }
 				END {
 					cnt = main - sub_cnt
@@ -786,7 +808,7 @@ f_dnsup() {
 				if [ "${nft_rc}" = "0" ]; then
 					f_log "debug" "external DNS bridge loaded: ${adb_bridgednsv4:-"-"} / ${adb_bridgednsv6:-"-"}"
 				else
-					f_log "err" "failed to load external DNS bridge: ${adb_bridgednsv4:-"-"} / ${adb_bridgednsv6:-"-"}"
+					f_log "info" "failed to load external DNS bridge: ${adb_bridgednsv4:-"-"} / ${adb_bridgednsv6:-"-"}"
 				fi
 			fi
 		fi
@@ -851,7 +873,7 @@ f_dnsup() {
 		if [ "${nft_rc}" = "0" ]; then
 			f_log "debug" "external DNS bridge removed"
 		else
-			f_log "err" "failed to remove external DNS bridge"
+			f_log "info" "failed to remove external DNS bridge"
 		fi
 	fi
 
@@ -875,13 +897,19 @@ f_etag() {
 			# fetch http headers and extract http code and etag/last-modified header
 			#
 			http_head="$("${adb_fetchcmd}" ${adb_etagparm} "${feed_url}${feed_suffix}" 2>&1)"
-			http_code="$(printf '%s' "${http_head}" | "${adb_awkcmd}" 'tolower($0)~/^[[:space:]]*http\/[0-9.]+ /{printf "%s",$2}')"
-			etag_id="$(printf '%s' "${http_head}" | "${adb_awkcmd}" 'tolower($0)~/^[[:space:]]*etag: /{gsub(/[\r"]/,"");printf "%s",$2}')"
+			http_code="$(printf '%s' "${http_head}" | "${adb_awkcmd}" 'tolower($0)~/^[[:space:]]*http\/[0123\.]+ /{code=$2} END{printf "%s",code}')"
+			etag_id="$(printf '%s' "${http_head}" | "${adb_awkcmd}" 'tolower($0)~/^[[:space:]]*etag: /{gsub(/[\r"]/,"");id=$2} END{printf "%s",id}')"
 
 			# if etag header is not present, try to use last-modified header as fallback for change detection
 			#
 			if [ -z "${etag_id}" ]; then
-				etag_id="$(printf '%s' "${http_head}" | "${adb_awkcmd}" 'tolower($0)~/^[[:space:]]*last-modified: /{gsub(/[Ll]ast-[Mm]odified:|[[:space:]]|,|:/,"");printf "%s\n",$1}')"
+				etag_id="$(printf '%s' "${http_head}" | "${adb_awkcmd}" 'tolower($0)~/^[[:space:]]*last-modified: /{gsub(/[Ll]ast-[Mm]odified:|[[:space:]]|,|:/,"");lm=$1} END{printf "%s",lm}')"
+			fi
+
+			# if last-modified is also missing, fall back to a positive content-length as change indicator
+			#
+			if [ -z "${etag_id}" ]; then
+				etag_id="$(printf '%s' "${http_head}" | "${adb_awkcmd}" 'tolower($0)~/^[[:space:]]*content-length: /{gsub(/\r/,"");cl=$2} END{if(cl+0>0)printf "%s",cl}')"
 			fi
 		fi
 
@@ -895,11 +923,10 @@ f_etag() {
 			# compare http code and etag id with stored values, update etag file and return code accordingly
 			#
 			etag_cnt="$("${adb_awkcmd}" -v f="${feed}" -v s="${feed_suffix}" -v e="${etag_id}" '
-			BEGIN { matched = 0; cnt = 0; p = f " " s }
+			BEGIN { matched = 0; cnt = 0; p = f " " s "\t" }
 			$1 == f { cnt++ }
 			index($0, p) == 1 {
 				rest = substr($0, length(p) + 1)
-				sub(/^[[:space:]]+/, "", rest)
 				if (rest == e) { matched = 1 }
 			}
 			END { print cnt; exit !matched }' "${adb_backupdir}/adblock.etag")"
@@ -908,7 +935,15 @@ f_etag() {
 
 		# compare http code, etag count and etag id; update etag file and return code accordingly
 		#
-		if [ "${feed_rm}" = "0" ] && [ "${http_code}" = "200" ] && [ "${etag_cnt}" = "${feed_cnt}" ] && [ -n "${etag_id}" ] && [ "${etag_match}" = "0" ]; then
+		if [ "${feed_rm}" = "sweep" ]; then
+
+			# drop entries for feeds no longer in the active feed list (${feed})
+			#
+			"${adb_awkcmd}" -v feeds=" ${feed} " 'index(feeds, " " $1 " ")' \
+				"${adb_backupdir}/adblock.etag" >"${adb_backupdir}/adblock.etag.new" 2>>"${adb_errorlog}" &&
+				"${adb_mvcmd}" -f "${adb_backupdir}/adblock.etag.new" "${adb_backupdir}/adblock.etag"
+			out_rc="${?}"
+		elif [ "${feed_rm}" = "0" ] && [ "${http_code}" = "200" ] && [ "${etag_cnt}" = "${feed_cnt}" ] && [ -n "${etag_id}" ] && [ "${etag_match}" = "0" ]; then
 			out_rc="0"
 		elif [ -n "${etag_id}" ] || [ "${feed_rm}" = "1" ]; then
 
@@ -920,11 +955,11 @@ f_etag() {
 					"${adb_backupdir}/adblock.etag" >"${adb_backupdir}/adblock.etag.new"
 			else
 				"${adb_awkcmd}" -v f="${feed}" -v s="${feed_suffix}" '
-				BEGIN { p = f " " s }
+				BEGIN { p = f " " s "\t" }
 				index($0, p) != 1' \
 					"${adb_backupdir}/adblock.etag" >"${adb_backupdir}/adblock.etag.new"
-			fi
-			"${adb_mvcmd}" -f "${adb_backupdir}/adblock.etag.new" "${adb_backupdir}/adblock.etag"
+			fi &&
+				"${adb_mvcmd}" -f "${adb_backupdir}/adblock.etag.new" "${adb_backupdir}/adblock.etag"
 			[ "${feed_rm}" = "0" ] && printf '%s\t%s\n' "${feed} ${feed_suffix}" "${etag_id}" >>"${adb_backupdir}/adblock.etag"
 			out_rc="2"
 		fi
@@ -1115,6 +1150,17 @@ f_feedrm() {
 	adb_feed="${adb_feed% }"
 }
 
+# extract and validate the host part of an url
+#
+f_urlhost() {
+	local host="${1#*://}"
+
+	host="${host%%[/?#]*}"
+	host="${host##*@}"
+	host="${host%:*}"
+	printf '%s\n' "${host}" | f_chkdom local 1
+}
+
 # backup/restore/remove blocklists
 #
 f_list() {
@@ -1196,6 +1242,8 @@ f_list() {
 					"${adb_zcatcmd}" "${adb_backupdir}/safesearch.${src_name}.gz" >"${adb_tmpdir}/tmp.load.safesearch.${src_name}"
 				fi
 			fi
+			[ -s "${adb_tmpdir}/tmp.load.safesearch.${src_name}" ] &&
+				safe_domains="$(f_chkdom google 1 <"${adb_tmpdir}/tmp.load.safesearch.${src_name}")"
 			;;
 		"bing")
 			safe_cname="strict.bing.com"
@@ -1245,7 +1293,7 @@ f_list() {
 		;;
 	"prepare")
 		file_name="${src_tmpfile}"
-		if [ -s "${src_tmpload}" ]; then
+		if [ "${src_rc}" = "0" ] && [ -s "${src_tmpload}" ]; then
 			if [ "${adb_tld}" = "1" ]; then
 				f_chkdom ${src_rset} <"${src_tmpload}" |
 					"${adb_awkcmd}" 'BEGIN{FS="."}{for(f=NF;f>1;f--)printf "%s.",$f;print $1}' |
@@ -1272,6 +1320,7 @@ f_list() {
 				out_rc="${?}"
 			fi
 		fi
+		"${adb_rmcmd}" -f "${src_tmpload}"
 		;;
 	"backup")
 		file_name="${src_tmpfile}"
@@ -1343,9 +1392,11 @@ f_list() {
 	"final")
 		src_name=""
 		file_name="${adb_finaldir}/${adb_dnsfile}"
+		[ -s "${adb_tmpdir}/tmp.add.allowlist" ] &&
+			"${adb_sortcmd}" ${adb_srtopts} -u "${adb_tmpdir}/tmp.add.allowlist" -o "${adb_tmpdir}/tmp.add.allowlist"
 		{
 			[ -n "${adb_dnsheader}" ] && printf '%b' "${adb_dnsheader}"
-			[ -s "${adb_tmpdir}/tmp.add.allowlist" ] && "${adb_sortcmd}" ${adb_srtopts} -u "${adb_tmpdir}/tmp.add.allowlist"
+			[ -s "${adb_tmpdir}/tmp.add.allowlist" ] && "${adb_catcmd}" "${adb_tmpdir}/tmp.add.allowlist"
 			[ "${adb_safesearch}" = "1" ] && "${adb_catcmd}" "${adb_tmpdir}/tmp.safesearch."* 2>>"${adb_errorlog}"
 			if [ "${adb_dnsdeny}" = "1" ]; then
 				f_dnsdeny "${adb_tmpdir}/${adb_dnsfile}"
@@ -1371,52 +1422,34 @@ f_list() {
 # top level domain compression
 #
 f_tld() {
-	local cnt_tld cnt_rem source="${1}" temp_tld="${1}.tld"
+	local cnt_tld source="${1}" temp_tld="${1}.tld" allow="${adb_tmpdir}/tmp.rem.allowlist"
 
-	# reverse domain, get unique tlds and unreverse them back to original form
+	# single pass over the reversed, sorted input:
+	# drop subdomains of already kept domains, unreverse the rest and drop allowlisted (sub-) domains
+	# a stack of kept parents is needed, as siblings like 'com.foo-bar' sort between 'com.foo' and 'com.foo.sub'
 	#
-	if "${adb_awkcmd}" '
-		function unreverse(dom, n, seg, out, i) {
-			n = split(dom, seg, ".")
-			out = seg[n]
-			for (i = n-1; i >= 1; i--) out = out "." seg[i]
-			return out
-		}
+	if "${adb_awkcmd}" -v allow="${allow}" '
+		BEGIN { FS = "."; while ((getline line <allow) > 0) del[line] }
 		{
-			if (NR == 1) { parent = $NF }
-			else if (index($NF, parent ".") == 0) { print unreverse(parent); parent = $NF }
+			while (sp > 0 && index($0, stk[sp]) != 1) sp--
+			if (sp > 0 && index($0, stk[sp] ".") == 1) next
+			stk[++sp] = $0
+			dom = $1
+			if (dom in del) next
+			for (i = 2; i <= NF; i++) {
+				dom = $i "." dom
+				if (dom in del) next
+			}
+			print dom
 		}
-		END { if (parent) print unreverse(parent) }
 	' "${source}" >"${temp_tld}"; then
-		[ "${adb_debug}" = "1" ] && cnt_tld="$(f_count tld "${temp_tld}" "var")"
-
-		# remove allowlisted (sub-) domains from tld list if allowlist is enabled and not empty
-		#
-		if [ -s "${adb_tmpdir}/tmp.rem.allowlist" ]; then
-			"${adb_awkcmd}" '
-				NR==FNR {
-					del[$0]
-					next
-				}
-				{
-					dominated = 0
-					n = split($0, seg, ".")
-					for (i = 1; i <= n; i++) {
-						parent = seg[i]
-						for (j = i + 1; j <= n; j++) parent = parent "." seg[j]
-						if (parent in del) { dominated = 1; break }
-					}
-					if (!dominated) print
-				}
-			' "${adb_tmpdir}/tmp.rem.allowlist" "${temp_tld}" >"${source}"
-			"${adb_rmcmd}" -f "${temp_tld}"
-			[ "${adb_debug}" = "1" ] && cnt_rem="$(f_count tld "${source}" "var")"
-		else
-			"${adb_mvcmd}" -f "${temp_tld}" "${source}"
-		fi
+		"${adb_mvcmd}" -f "${temp_tld}" "${source}"
+		[ "${adb_debug}" = "1" ] && cnt_tld="$(f_count tld "${source}" "var")"
+	else
+		"${adb_rmcmd}" -f "${temp_tld}"
 	fi
 
-	f_log "debug" "f_tld    ::: name: -, cnt: ${adb_cnt:-"-"}, cnt_tld: ${cnt_tld:-"-"}, cnt_rem: ${cnt_rem:-"-"}"
+	f_log "debug" "f_tld    ::: name: -, cnt: ${adb_cnt:-"-"}, cnt_tld: ${cnt_tld:-"-"}"
 }
 
 # suspend/resume adblock processing
@@ -1472,18 +1505,15 @@ f_switch() {
 			if "${adb_nftcmd}" flush chain inet adblock dns-bridge 2>>"${adb_errorlog}"; then
 				switch="nft"
 			fi
-			f_count "final" "${adb_finaldir}/${adb_dnsfile}"
 
 		# resume via local DNS
 		#
 		else
 			if [ "${adb_dnsshift}" = "0" ] && [ -f "${adb_backupdir}/${adb_dnsfile}" ]; then
 				"${adb_mvcmd}" -f "${adb_backupdir}/${adb_dnsfile}" "${adb_finaldir}/${adb_dnsfile}"
-				f_count "final" "${adb_finaldir}/${adb_dnsfile}"
 				switch="dns"
 			elif [ "${adb_dnsshift}" = "1" ] && [ ! -L "${adb_dnsdir}/${adb_dnsfile}" ]; then
 				"${adb_lncmd}" -fs "${adb_finaldir}/${adb_dnsfile}" "${adb_dnsdir}/${adb_dnsfile}"
-				f_count "final" "${adb_finaldir}/${adb_dnsfile}"
 				switch="dns"
 			fi
 		fi
@@ -1499,7 +1529,6 @@ f_switch() {
 		f_jsnup "${mode}"
 		f_log "info" "${mode} adblock service via local DNS"
 	else
-		f_count "final" "${adb_finaldir}/${adb_dnsfile}"
 		f_jsnup "${status}"
 	fi
 	f_rmtemp
@@ -1541,11 +1570,6 @@ f_search() {
 	# search blocklist
 	#
 	case "${adb_dns}" in
-	"dnsmasq")
-		prefix='local=.*[\/\.]'
-		suffix='\/'
-		field="2"
-		;;
 	"unbound")
 		prefix='local-zone: .*["\.]'
 		suffix='" always_nxdomain'
@@ -1583,7 +1607,25 @@ f_search() {
 	#
 	while :; do
 		search="${domain//./\\.}"
-		res="$("${adb_awkcmd}" -F '/|\"|\t| ' "/^(${prefix}${search}${suffix})$/{i++;if(i<=3){printf \"  + %s\n\",\$${field}}else if(i==4){printf \"  + %s\n\",\"[...]\";exit}}" "${adb_finaldir}/${adb_dnsfile}")"
+		if [ "${adb_dns}" = "dnsmasq" ]; then
+			res="$("${adb_awkcmd}" -F '/' -v s="${domain}" '
+				$1 == "local=" && $NF == "" && index($0, s "/") {
+					for (f = 2; f < NF; f++) {
+						if ($f == s || (length($f) > length(s) && substr($f, length($f) - length(s)) == "." s)) {
+							i++
+							if (i <= 3) {
+								printf "  + %s\n", $f
+							} else {
+								printf "  + %s\n", "[...]"
+								exit
+							}
+						}
+					}
+				}
+			' "${adb_finaldir}/${adb_dnsfile}")"
+		else
+			res="$("${adb_awkcmd}" -F '/|\"|\t| ' "/^(${prefix}${search}${suffix})$/{i++;if(i<=3){printf \"  + %s\n\",\$${field}}else if(i==4){printf \"  + %s\n\",\"[...]\";exit}}" "${adb_finaldir}/${adb_dnsfile}")"
+		fi
 		printf '%s\n%s\n%s\n' ":::" "::: domain '${domain}' in active blocklist" ":::" >>"${result_tmp}"
 		printf '%s\n\n' "${res:-"  - no match"}" >>"${result_tmp}"
 		[ "${domain}" = "${tld}" ] && break
@@ -1652,7 +1694,7 @@ f_search() {
 #
 f_jsnup() {
 	local s_shift s_custom s_unfiltered s_filtered s_remote s_bridge s_force s_flush s_tld s_search s_report s_mail
-	local s_jail s_debug pid pids object feeds end_time runtime dns dns_ver free_mem custom_feed="0" status="${1:-"enabled"}"
+	local s_jail s_debug pid pids object feeds end_time runtime backup_cnt dns dns_ver free_mem custom_feed="0" status="${1:-"enabled"}"
 	local vm_mem dns_mem="0" duration jail="0" nft_unfiltered="0" nft_filtered="0" nft_remote="0" nft_bridge="0" nft_force="0"
 
 	# get DNS memory usage and version
@@ -1717,7 +1759,7 @@ f_jsnup() {
 			end_time="${end_time%.*}"
 			duration="$(((end_time - adb_starttime) / 60))m $(((end_time - adb_starttime) % 60))s"
 		fi
-		runtime="mode: ${adb_action}, date / time: $(date "+%d/%m/%Y %H:%M:%S"), duration: ${duration:-"-"}, memory: ${free_mem:-0} MB available"
+		runtime="mode: ${adb_action}, date / time: $(date "+%Y-%m-%d %H:%M:%S"), duration: ${duration:-"-"}, memory: ${free_mem:-0} MB available"
 		;;
 	"resume")
 		status="enabled"
@@ -1735,7 +1777,10 @@ f_jsnup() {
 	#
 	json_init
 	if json_load_file "${adb_rtfile}" >/dev/null 2>&1; then
+		json_get_var backup_cnt "backup_cnt"
+		[ "${1}" = "resume" ] && adb_cnt="${backup_cnt:-"0"}"
 		[ -z "${adb_cnt}" ] && json_get_var adb_cnt "blocked_domains"
+		[ "${status}" = "enabled" ] && backup_cnt="${adb_cnt}"
 		[ -z "${runtime}" ] && json_get_var runtime "last_run"
 		if [ "${status}" = "enabled" ]; then
 			if [ "${adb_jail}" = "1" ] && [ -n "${adb_dnsstop}" ]; then
@@ -1774,6 +1819,7 @@ f_jsnup() {
 	json_add_string "frontend_ver" "${adb_fver}"
 	json_add_string "backend_ver" "${adb_bver}"
 	json_add_string "blocked_domains" "${adb_cnt:-"0"}"
+	json_add_string "backup_cnt" "${backup_cnt:-"0"}"
 	json_add_array "active_feeds"
 	for object in ${feeds:-"-"}; do
 		json_add_string "${object}" "${object}"
@@ -1871,8 +1917,7 @@ f_main() {
 	# add map service domain to allowlist if map is enabled
 	#
 	if [ "${adb_map}" = "1" ] && [ "${adb_dnsallow}" = "1" ] && [ -n "${adb_geourl}" ]; then
-		map_domain="${adb_geourl#*://}"
-		map_domain="${map_domain%%/*}"
+		map_domain="$(f_urlhost "${adb_geourl}")"
 		if [ -n "${map_domain}" ]; then
 			printf '%s\n' "${map_domain}" | f_dnsallow >>"${adb_tmpdir}/tmp.add.allowlist"
 			printf '%s\n' "${map_domain}" >>"${adb_tmpdir}/tmp.rem.allowlist"
@@ -1928,8 +1973,7 @@ f_main() {
 
 		# add domains of active feed URLs to the allowlist
 		#
-		src_domain="${src_url#*://}"
-		src_domain="${src_domain%%/*}"
+		src_domain="$(f_urlhost "${src_url}")"
 		if [ -n "${src_domain}" ] && [ "${adb_dnsallow}" = "1" ]; then
 			case " ${seen_domains} " in
 			*" ${src_domain} "*) ;;
@@ -2017,7 +2061,8 @@ f_main() {
 				for suffix in ${src_cat}; do
 					"${adb_fetchcmd}" ${adb_fetchparm} "${src_tmpcat}" "${src_url}${suffix}" 2>>"${adb_errorlog}"
 					src_rc="${?}"
-					if [ "${src_rc}" = "0" ] && [ -s "${src_tmpcat}" ]; then
+					[ "${src_rc}" = "0" ] || break
+					if [ -s "${src_tmpcat}" ]; then
 						"${adb_catcmd}" "${src_tmpcat}" >>"${src_tmpload}"
 						: >"${src_tmpcat}"
 					fi
@@ -2088,6 +2133,10 @@ f_main() {
 			f_feedrm "${entry}"
 		done <"${rm_file}"
 	done
+
+	# drop orphaned etag entries for feeds no longer in the active feed list
+	#
+	[ "${adb_action}" = "reload" ] && f_etag "${adb_feed}" "" "" "" "sweep"
 
 	# tld compression and dns restart
 	#
@@ -2219,7 +2268,7 @@ f_report() {
 			start="$("${adb_awkcmd}" 'END{printf "%s_%s",$1,$2}' "${report_srt}")"
 			end="$("${adb_awkcmd}" 'NR==1{printf "%s_%s",$1,$2}' "${report_srt}")"
 			total="$(f_count tld "${report_srt}" "var")"
-			blocked="$("${adb_awkcmd}" '{if($7=="NX")cnt++}END{printf "%s",cnt}' "${report_srt}")"
+			blocked="$("${adb_awkcmd}" '{if($7=="NX")cnt++}END{printf "%s",cnt+0}' "${report_srt}")"
 			percent="$("${adb_awkcmd}" -v t="${total}" -v b="${blocked}" 'BEGIN{ if(t>0) printf "%.2f%s",b/t*100,"%"; else printf "0.00%%"}')"
 			{
 				printf '%s\n' "{ "
@@ -2326,7 +2375,7 @@ f_report() {
 
 			# build json request list
 			#
-			search="${search//[!a-zA-Z0-9._-]/}"
+			search="${search//[!a-zA-Z0-9._:-]/}"
 			case "${res_count}" in
 			'' | *[!0-9]*)
 				res_count="50"
@@ -2371,10 +2420,8 @@ f_report() {
 			cnt="1"
 			network_find_wan iface_v4 && network_get_ipaddr ip_v4 "${iface_v4}"
 			network_find_wan6 iface_v6 && network_get_ipaddr6 ip_v6 "${iface_v6}"
-			if [ -n "${ip_v4}" ] || [ -n "${ip_v6}" ]; then
-				f_fetch
-				printf '%s' ",[{}" >"${map_jsn}"
-			fi
+			f_fetch
+			printf '%s' ",[{}" >"${map_jsn}"
 			for ip in ${ip_v4} ${ip_v6}; do
 				(
 					"${adb_fetchcmd}" ${adb_geoparm} "${adb_geourl}/${ip}" 2>>"${adb_errorlog}" |
@@ -2384,7 +2431,7 @@ f_report() {
 				cnt="$((cnt + 1))"
 			done
 			wait
-			if [ -s "${map_jsn}" ] && [ "${cnt}" -lt "45" ]; then
+			if [ "${cnt}" -lt "45" ]; then
 				map_seen=""
 				json_init
 				if json_load_file "${report_jsn}" >/dev/null 2>&1; then

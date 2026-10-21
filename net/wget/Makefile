@@ -61,7 +61,7 @@ define Package/wget-nossl
 $(call Package/wget/Default)
   TITLE+= (without SSL support)
   VARIANT:=nossl
-  ALTERNATIVES:=300:/usr/bin/wget:/usr/libexec/wget-nossl
+  ALTERNATIVES:=100:/usr/bin/wget:/usr/libexec/wget-nossl
 endef
 
 define Package/wget-nossl/description
